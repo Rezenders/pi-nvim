@@ -55,6 +55,10 @@ function M.setup(opts)
     M.append_selection(args)
   end, { range = true, desc = "Append selected code to pi's draft without submitting" })
 
+  vim.api.nvim_create_user_command("PiAppendSelectionPrompt", function(args)
+    M.append_selection_prompt(args)
+  end, { range = true, desc = "Append selected code with a prompt to pi's draft without submitting" })
+
   vim.api.nvim_create_user_command("PiAppendFile", function()
     M.append_file()
   end, { desc = "Append current file reference to pi's draft" })
@@ -391,6 +395,42 @@ function M.append_selection(args)
   end
   local header = string.format("From %s, lines %d-%d:", draft_file(), selection.start_line, selection.end_line)
   M.append_draft(draft_code(header, selection.text))
+end
+
+--- Append a visual selection, or an explicit Ex line range, with a message prompt to pi's draft.
+function M.append_selection_prompt(args)
+  local mode = vim.fn.mode()
+  local selection
+  if mode == "v" or mode == "V" or mode == "\22" then
+    -- Set the visual marks before reading them; do not use a stale selection.
+    vim.cmd("normal! \27")
+    selection = require("pi-nvim.ui").capture_selection()
+  elseif args and args.range and args.range > 0 then
+    selection = {
+      text = table.concat(vim.api.nvim_buf_get_lines(0, args.line1 - 1, args.line2, false), "\n"),
+      start_line = args.line1,
+      end_line = args.line2,
+    }
+  else
+    selection = require("pi-nvim.ui").capture_selection()
+  end
+  if not selection or selection.text == "" then
+    vim.notify("Select code or provide a line range first", vim.log.levels.WARN)
+    return
+  end
+  local header = string.format("From %s, lines %d-%d:", draft_file(), selection.start_line, selection.end_line)
+  local code = draft_code(header, selection.text)
+
+  vim.ui.input({ prompt = "Pi draft message: " }, function(input)
+    if not input then return end
+    local payload
+    if input:match("%S") then
+      payload = input .. "\n\n" .. code
+    else
+      payload = code
+    end
+    M.append_draft(payload)
+  end)
 end
 
 --- Append only the absolute file path (the agent can read it when submitted).

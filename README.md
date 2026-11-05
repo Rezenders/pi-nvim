@@ -70,6 +70,7 @@ Start pi in one terminal. Start Neovim in another. The pi extension automaticall
 | `:PiSendSelection` | Send visual selection + prompt |
 | `:PiSendBuffer` | Send entire buffer + prompt |
 | `:PiAppendSelection` | Append a line range to the Pi terminal draft without submitting |
+| `:PiAppendSelectionPrompt` | Append a line range with a user prompt to the Pi terminal draft |
 | `:PiAppendFile` | Append the current absolute file path to the draft |
 | `:PiAppendBuffer` | Append the entire buffer (including unsaved edits) to the draft |
 | `:PiPing` | Check if pi is reachable |
@@ -118,6 +119,8 @@ question, and press Enter there when ready. No separate Neovim draft is kept.
 local pi = require("pi-nvim")
 vim.keymap.set("x", "<leader>ps", pi.append_selection,
   { desc = "Add selection to Pi draft" })
+vim.keymap.set("x", "<leader>pa", pi.append_selection_prompt,
+  { desc = "Add selection with message to Pi draft" })
 vim.keymap.set("n", "<leader>pf", pi.append_file,
   { desc = "Add file reference to Pi draft" })
 vim.keymap.set("n", "<leader>pb", pi.append_buffer,

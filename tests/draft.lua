@@ -21,6 +21,9 @@ vim.cmd("2,3PiAppendSelection")
 includes("lines 2-3:")
 includes("second line\n``` nested fence")
 includes("````lua")
+vim.ui.input = function(opts, cb) cb("command prompt note") end
+vim.cmd("2,3PiAppendSelectionPrompt")
+includes("command prompt note\n\nFrom /tmp/pi-nvim-draft-example.lua, lines 2-3:")
 vim.cmd("PiAppendBuffer")
 includes("abcdef\nsecond line")
 includes("你好 🦊")
@@ -46,6 +49,22 @@ vim.api.nvim_win_set_cursor(0, { 1, 3 })
 vim.cmd("normal! v2h")
 pi.append_selection()
 includes("\nbcd\n")
+
+-- Append selection with prompt.
+vim.ui.input = function(opts, cb) cb("look at this") end
+vim.api.nvim_win_set_cursor(0, { 1, 1 })
+vim.cmd("normal! v2l")
+pi.append_selection_prompt()
+includes("look at this\n\nFrom /tmp/pi-nvim-draft-example.lua, lines 1-1:")
+includes("\nbcd\n")
+
+-- Cancel prompt should not append.
+vim.ui.input = function(opts, cb) cb(nil) end
+local cancel_count = #sent
+vim.api.nvim_win_set_cursor(0, { 1, 1 })
+vim.cmd("normal! v2l")
+pi.append_selection_prompt()
+assert(#sent == cancel_count)
 
 local count = #sent
 pi.append_selection() -- no active selection or range
