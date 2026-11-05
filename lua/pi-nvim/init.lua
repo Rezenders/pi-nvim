@@ -51,6 +51,18 @@ function M.setup(opts)
     M.send_buffer()
   end, { desc = "Send entire buffer to pi with a prompt" })
 
+  vim.api.nvim_create_user_command("PiAppendSelection", function(args)
+    M.append_selection(args)
+  end, { range = true, desc = "Append selected code to pi's draft without submitting" })
+
+  vim.api.nvim_create_user_command("PiAppendFile", function()
+    M.append_file()
+  end, { desc = "Append current file reference to pi's draft" })
+
+  vim.api.nvim_create_user_command("PiAppendBuffer", function()
+    M.append_buffer()
+  end, { desc = "Append entire buffer to pi's draft" })
+
   vim.api.nvim_create_user_command("Pi", function(args)
     local ui = require("pi-nvim.ui")
     local selection = nil
@@ -323,6 +335,77 @@ function M.send_buffer()
     end
     M.prompt(message)
   end)
+end
+
+--- Append text to the running Pi TUI's input without submitting or focusing it.
+--- @param message string
+function M.append_draft(message)
+  if type(message) ~= "string" or not message:find("%S") then
+    vim.notify("Nothing to append to pi draft", vim.log.levels.WARN)
+    return
+  end
+  M.send_raw({ type = "append_draft", message = message }, function(err, resp)
+    if err then
+      vim.notify("Could not append to pi draft: " .. err, vim.log.levels.ERROR)
+    elseif resp and resp.ok then
+      vim.notify("Added to pi draft (not submitted)", vim.log.levels.INFO)
+    else
+      vim.notify("pi draft error: " .. (resp and resp.error or "unknown"), vim.log.levels.ERROR)
+    end
+  end)
+end
+
+local function draft_file()
+  local file = vim.api.nvim_buf_get_name(0)
+  return file ~= "" and vim.fn.fnamemodify(file, ":p") or "(unnamed buffer)"
+end
+
+local function draft_code(header, content)
+  -- A longer fence keeps Markdown selections containing ``` intact.
+  local width = 3
+  for ticks in content:gmatch("`+") do
+    width = math.max(width, #ticks + 1)
+  end
+  local fence = string.rep("`", width)
+  return header .. "\n" .. fence .. vim.bo.filetype .. "\n" .. content .. "\n" .. fence
+end
+
+--- Append a visual selection, or an explicit Ex line range, including unsaved text.
+function M.append_selection(args)
+  local mode = vim.fn.mode()
+  local selection
+  if mode == "v" or mode == "V" or mode == "\22" then
+    -- Set the visual marks before reading them; do not use a stale selection.
+    vim.cmd("normal! \27")
+    selection = require("pi-nvim.ui").capture_selection()
+  elseif args and args.range and args.range > 0 then
+    selection = {
+      text = table.concat(vim.api.nvim_buf_get_lines(0, args.line1 - 1, args.line2, false), "\n"),
+      start_line = args.line1,
+      end_line = args.line2,
+    }
+  end
+  if not selection or selection.text == "" then
+    vim.notify("Select code or provide a line range first", vim.log.levels.WARN)
+    return
+  end
+  local header = string.format("From %s, lines %d-%d:", draft_file(), selection.start_line, selection.end_line)
+  M.append_draft(draft_code(header, selection.text))
+end
+
+--- Append only the absolute file path (the agent can read it when submitted).
+function M.append_file()
+  if vim.api.nvim_buf_get_name(0) == "" then
+    vim.notify("No file open", vim.log.levels.WARN)
+    return
+  end
+  M.append_draft("File: " .. draft_file())
+end
+
+--- Append a snapshot of the entire buffer, including unsaved edits.
+function M.append_buffer()
+  local content = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+  M.append_draft(draft_code("File: " .. draft_file(), content))
 end
 
 --- Ping the pi session to check connectivity.

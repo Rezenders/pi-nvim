@@ -69,6 +69,9 @@ Start pi in one terminal. Start Neovim in another. The pi extension automaticall
 | `:PiSendFile` | Send current file path + prompt |
 | `:PiSendSelection` | Send visual selection + prompt |
 | `:PiSendBuffer` | Send entire buffer + prompt |
+| `:PiAppendSelection` | Append a line range to the Pi terminal draft without submitting |
+| `:PiAppendFile` | Append the current absolute file path to the draft |
+| `:PiAppendBuffer` | Append the entire buffer (including unsaved edits) to the draft |
 | `:PiPing` | Check if pi is reachable |
 | `:PiSessions` | List/switch between running pi sessions |
 
@@ -104,12 +107,45 @@ vim.keymap.set("n", "<leader>pb", ":PiSendBuffer<CR>")
 vim.keymap.set("n", "<leader>pi", ":PiPing<CR>")
 ```
 
+### Collect context, then write your message in Kitty
+
+The append actions add context to the running Pi terminal's input editor. They
+preserve any existing draft, keep focus in Neovim, and **do not start or queue an
+agent turn**. Collect several snippets, switch to your Pi pane, write your
+question, and press Enter there when ready. No separate Neovim draft is kept.
+
+```lua
+local pi = require("pi-nvim")
+vim.keymap.set("x", "<leader>ps", pi.append_selection,
+  { desc = "Add selection to Pi draft" })
+vim.keymap.set("n", "<leader>pf", pi.append_file,
+  { desc = "Add file reference to Pi draft" })
+vim.keymap.set("n", "<leader>pb", pi.append_buffer,
+  { desc = "Add buffer to Pi draft" })
+```
+
+The visual mapping captures characterwise, linewise, and blockwise selections.
+`:10,20PiAppendSelection` appends an explicit line range. Selections and buffers
+are code snapshots with absolute file paths; file references contain only the
+path, so save the file if you want the agent to read recent edits from disk.
+These mappings are opt-in; the existing default `<leader>p` still opens the
+send dialog and existing `PiSend*` commands still submit immediately.
+
+Use `:PiSessions` to select the intended agent when several are running. Both
+the Lua plugin and Pi extension must include append support. Reload/restart Pi
+after updating its extension and restart Neovim after changing mappings.
+Appending requires Pi's TUI with `ctx.mode`, `getEditorText`, and `setEditorText`
+APIs (tested against Pi 1.5.0 APIs); RPC/print/JSON modes are rejected rather than
+risking draft replacement. Drafts have the same lifetime as Pi's normal input
+editor; this feature does not persist them separately across restarts.
+
 ## Protocol
 
 The socket accepts newline-delimited JSON:
 
 ```json
 {"type": "prompt", "message": "your prompt here"}
+{"type": "append_draft", "message": "context to append without submitting"}
 {"type": "ping"}
 ```
 
@@ -126,6 +162,19 @@ This means you can also send prompts from any tool:
 ```bash
 echo '{"type":"prompt","message":"hello"}' | socat - UNIX-CONNECT:/tmp/pi-nvim-sockets/<hash>.sock
 ```
+
+## Draft regression tests
+
+Run from the repository root (Node.js 24+ for the TypeScript stripping test):
+
+```bash
+node tests/draft.test.mjs
+nvim --headless -u NONE -l tests/draft.lua
+```
+
+The protocol test mocks Pi's editor and socket/filesystem infrastructure so it
+cannot modify a live session. The Neovim test checks selection capture,
+formatting, commands, and focus preservation without sending to a live agent.
 
 ## License
 

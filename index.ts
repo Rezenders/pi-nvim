@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import * as net from "node:net";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -16,6 +16,7 @@ import * as crypto from "node:crypto";
  * Commands:
  *   { "type": "prompt", "message": "..." }
  *   { "type": "prompt", "message": "...", "images": [...] }
+ *   { "type": "append_draft", "message": "..." }
  *   { "type": "ping" }
  *
  * Responses:
@@ -87,7 +88,7 @@ export default function (pi: ExtensionAPI) {
           const line = buffer.slice(0, newlineIdx).trim();
           buffer = buffer.slice(newlineIdx + 1);
           if (!line) continue;
-          handleMessage(line, conn, cwd);
+          handleMessage(line, conn, ctx);
         }
       });
       conn.on("error", () => {});
@@ -127,12 +128,31 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
-  function handleMessage(raw: string, conn: net.Socket, _cwd: string) {
+  function handleMessage(raw: string, conn: net.Socket, ctx: ExtensionContext) {
     try {
       const msg = JSON.parse(raw);
 
       if (msg.type === "ping") {
         respond(conn, { ok: true, type: "pong" });
+        return;
+      }
+
+      if (msg.type === "append_draft") {
+        if (typeof msg.message !== "string" || !msg.message.trim()) {
+          respond(conn, { ok: false, error: "Draft message must be a non-empty string" });
+          return;
+        }
+        // RPC cannot read the editor's current contents. Never risk replacing
+        // a draft in a frontend that cannot support read-modify-write.
+        if (!("mode" in ctx) || ctx.mode !== "tui") {
+          respond(conn, { ok: false, error: "Appending to the draft requires Pi's terminal UI" });
+          return;
+        }
+        const current = ctx.ui.getEditorText();
+        const separator =
+          !current || current.endsWith("\n\n") ? "" : current.endsWith("\n") ? "\n" : "\n\n";
+        ctx.ui.setEditorText(current + separator + msg.message + "\n\n");
+        respond(conn, { ok: true });
         return;
       }
 
