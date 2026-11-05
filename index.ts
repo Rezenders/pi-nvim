@@ -152,6 +152,9 @@ export default function (pi: ExtensionAPI) {
         const separator =
           !current || current.endsWith("\n\n") ? "" : current.endsWith("\n") ? "\n" : "\n\n";
         ctx.ui.setEditorText(current + separator + msg.message + "\n\n");
+        // setEditorText alone does not request a TUI redraw when called from
+        // a socket callback. A non-blocking notification refreshes the screen.
+        ctx.ui.notify("Context added to draft (not submitted)", "info");
         respond(conn, { ok: true });
         return;
       }

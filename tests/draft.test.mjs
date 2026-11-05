@@ -27,10 +27,11 @@ sandbox.extension({ on: (name, cb) => { handlers[name] = cb; }, registerCommand(
   sendUserMessage: (...args) => submitted.push(args) });
 let draft = "Already typed question";
 let writes = 0;
+const notifications = [];
 const ctx = { cwd: "/test", mode: "tui", ui: {
   getEditorText: () => draft,
   setEditorText: text => { draft = text; writes++; },
-  notify() {},
+  notify: (message, level) => notifications.push({ message, level, draft }),
 } };
 await handlers.session_start({}, ctx);
 const conn = new EventEmitter();
@@ -47,6 +48,9 @@ conn.emit("data", Buffer.from(first.slice(12)));
 conn.emit("data", Buffer.from(JSON.stringify({ type: "append_draft", message: "Second snippet" }) + "\n" + JSON.stringify({ type: "ping" }) + "\n"));
 assert.equal(draft, "Already typed question\n\nFirst snippet\n\nSecond snippet\n\n");
 assert.equal(submitted.length, 0, "Appending must never start or queue a turn");
+assert.equal(notifications.length, 2, "Each append must notify to request a TUI redraw");
+assert.equal(notifications.at(-1).draft, draft, "Redraw must happen after updating the editor");
+assert.equal(notifications.at(-1).level, "info");
 assert.equal(responses.at(-1).type, "pong");
 
 const saved = draft;
@@ -61,6 +65,7 @@ for (const mode of ["rpc", "print", "json"]) {
   assert.equal(responses.at(-1).ok, false);
   assert.equal(draft, saved);
 }
+assert.equal(notifications.length, 2, "Rejected appends must not show success notifications");
 ctx.mode = "tui";
 draft = "";
 send({ type: "append_draft", message: "你好 🦊\n```lua\nx = 1\n```" });
