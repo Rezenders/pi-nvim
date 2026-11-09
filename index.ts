@@ -160,9 +160,6 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (msg.type === "prompt" && typeof msg.message === "string") {
-        // Exit kitty's scrollback viewer by switching to private screen mode
-        // and back. This snaps to the bottom without clearing scrollback history.
-        process.stdout.write("\x1b[?1049h\x1b[?1049l");
         pi.sendUserMessage(msg.message, { deliverAs: "followUp" });
         respond(conn, { ok: true });
         return;
